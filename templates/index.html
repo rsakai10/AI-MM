@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>M&amp;M Conference Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0a0d0f;
+      --surface:    #0f1417;
+      --border:     #1e2a30;
+      --border-hi:  #2e4050;
+      --green:      #00e5a0;
+      --green-dim:  #00b87a;
+      --green-glow: rgba(0, 229, 160, 0.12);
+      --amber:      #f5a623;
+      --amber-dim:  #c47e10;
+      --red:        #ff5252;
+      --text:       #c8d8e0;
+      --text-dim:   #6a8090;
+      --text-hi:    #e8f4fa;
+      --mono:       'IBM Plex Mono', monospace;
+      --sans:       'IBM Plex Sans', sans-serif;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.06) 2px,
+        rgba(0,0,0,0.06) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 100vh;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px 48px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 28px 0 24px;
+      border-bottom: 1px solid var(--border);
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .header-left { display: flex; flex-direction: column; gap: 4px; }
+
+    .logo {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.25em;
+      color: var(--green);
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-family: var(--sans);
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-hi);
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: var(--text-dim);
+      font-family: var(--mono);
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      background: var(--surface);
+      transition: all 0.3s ease;
+    }
+
+    .status-pill.active {
+      border-color: var(--green-dim);
+      color: var(--green);
+      background: var(--green-glow);
+    }
+
+    .status-pill.active .dot { background: var(--green); animation: pulse 1.4s infinite; }
+
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.75); }
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 22px;
+      border-radius: 4px;
+      border: 1px solid;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .btn-start {
+      background: transparent;
+      border-color: var(--green-dim);
+      color: var(--green);
+    }
+
+    .btn-start:hover {
+      background: var(--green-glow);
+      border-color: var(--green);
+      box-shadow: 0 0 18px rgba(0,229,160,0.2);
+    }
+
+    .btn-stop {
+      background: transparent;
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    .btn-stop:hover {
+      background: rgba(255,82,82,0.1);
+      box-shadow: 0 0 18px rgba(255,82,82,0.2);
+    }
+
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+    .btn svg { flex-shrink: 0; }
+
+    .content {
+      padding-top: 24px;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 500px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .panel-title {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .panel-count {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--amber);
+      background: rgba(245,166,35,0.1);
+      border: 1px solid rgba(245,166,35,0.2);
+      border-radius: 3px;
+      padding: 2px 8px;
+    }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-hi) transparent;
+    }
+
+    .panel-body::-webkit-scrollbar { width: 4px; }
+    .panel-body::-webkit-scrollbar-track { background: transparent; }
+    .panel-body::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+
+    .qa-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--green-dim);
+      border-radius: 4px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      animation: slide-in 0.35s ease both;
+    }
+
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .qa-card .ts {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+    }
+
+    .qa-q {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-hi);
+      display: flex;
+      gap: 8px;
+    }
+
+    .qa-q::before {
+      content: 'Q';
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--green);
+      background: var(--green-glow);
+      border: 1px solid var(--green-dim);
+      border-radius: 3px;
+      padding: 1px 6px;
+      flex-shrink: 0;
+      align-self: flex-start;
+      margin-top: 2px;
+    }
+
+    .qa-a {
+      font-size: 13px;
+      color: var(--text);
+      display: flex;
+      gap: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    .qa-a::before {
+      content: 'A';
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--amber);
+      background: rgba(245,166,35,0.08);
+      border: 1px solid var(--amber-dim);
+      border-radius: 3px;
+      padding: 1px 6px;
+      flex-shrink: 0;
+      align-self: flex-start;
+      margin-top: 2px;
+    }
+
+    .empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 48px 24px;
+      color: var(--text-dim);
+      text-align: center;
+      flex: 1;
+    }
+
+    .empty svg { opacity: 0.3; }
+
+    .empty p {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .log-line {
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 6px 12px;
+      border-top: 1px solid var(--border);
+      color: var(--text-dim);
+      flex-shrink: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      min-height: 30px;
+    }
+
+    .log-line span { color: var(--green); }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="header-left">
+      <span class="logo">Surgical M&amp;M</span>
+      <h1>Conference Assistant</h1>
+      <span class="subtitle">Real-time question detection &amp; AI answers</span>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-pill" id="statusPill">
+        <span class="dot"></span>
+        <span id="statusText">Idle</span>
+      </div>
+      <button class="btn btn-start" id="toggleBtn" onclick="toggleRecording()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+        <span id="btnLabel">Start Listening</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="content">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Detected Questions &amp; Answers</span>
+        <span class="panel-count" id="qaCount">0</span>
+      </div>
+
+      <div class="panel-body" id="qaList">
+        <div class="empty" id="qaEmpty">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <p>Awaiting questions from the conference</p>
+        </div>
+      </div>
+
+      <div class="log-line" id="logLine">—</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let isRecording = false;
+  let evtSource = null;
+  let qaCount = 0;
+
+  function connectSSE() {
+    if (evtSource) evtSource.close();
+    evtSource = new EventSource('/stream');
+    evtSource.onmessage = (e) => {
+      const payload = JSON.parse(e.data);
+      handleEvent(payload);
+    };
+    evtSource.onerror = () => {
+      setLog('Connection interrupted — retrying…');
+    };
+  }
+
+  function handleEvent(payload) {
+    const { type, data } = payload;
+    if (type === 'qa') {
+      addQA(data);
+      setLog(`✦ Question captured at ${data.timestamp}`);
+    } else if (type === 'status') {
+      setLog(data.text);
+    } else if (type === 'no_question') {
+      setLog(`No question in segment — ${data.timestamp}`);
+    } else if (type === 'error') {
+      setLog(`Error: ${data.message}`);
+    }
+  }
+
+  function addQA(data) {
+    const empty = document.getElementById('qaEmpty');
+    if (empty) empty.remove();
+
+    const list = document.getElementById('qaList');
+    const card = document.createElement('div');
+    card.className = 'qa-card';
+    card.innerHTML = `
+      <span class="ts">${data.timestamp}</span>
+      <div class="qa-q">${escHtml(data.question)}</div>
+      <div class="qa-a">${escHtml(data.answer)}</div>
+    `;
+    list.prepend(card);
+    qaCount++;
+    document.getElementById('qaCount').textContent = qaCount;
+  }
+
+  function setLog(msg) {
+    const el = document.getElementById('logLine');
+    el.innerHTML = `<span>›</span> ${escHtml(msg)}`;
+  }
+
+  async function toggleRecording() {
+    const btn = document.getElementById('toggleBtn');
+    btn.disabled = true;
+    try {
+      if (!isRecording) {
+        const res = await fetch('/start', { method: 'POST' });
+        const json = await res.json();
+        if (json.status === 'started' || json.status === 'already_running') {
+          setRecordingState(true);
+          connectSSE();
+        }
+      } else {
+        const res = await fetch('/stop', { method: 'POST' });
+        const json = await res.json();
+        if (json.status === 'stopped' || json.status === 'not_running') {
+          setRecordingState(false);
+          setLog('Recording stopped.');
+        }
+      }
+    } catch (err) {
+      setLog('Network error — is the Flask server running?');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function setRecordingState(recording) {
+    isRecording = recording;
+    const pill   = document.getElementById('statusPill');
+    const status = document.getElementById('statusText');
+    const btn    = document.getElementById('toggleBtn');
+    const label  = document.getElementById('btnLabel');
+
+    if (recording) {
+      pill.classList.add('active');
+      status.textContent = 'Recording';
+      btn.className = 'btn btn-stop';
+      label.textContent = 'Stop Listening';
+      setLog('Recording started — listening for questions…');
+    } else {
+      pill.classList.remove('active');
+      status.textContent = 'Idle';
+      btn.className = 'btn btn-start';
+      label.textContent = 'Start Listening';
+    }
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  connectSSE();
+</script>
+</body>
+</html>
