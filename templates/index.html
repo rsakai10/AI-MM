@@ -20,6 +20,8 @@
       --amber:      #f5a623;
       --amber-dim:  #c47e10;
       --red:        #ff5252;
+      --blue:       #4a9eff;
+      --blue-dim:   #3a7ed9;
       --text:       #c8d8e0;
       --text-dim:   #6a8090;
       --text-hi:    #e8f4fa;
@@ -56,7 +58,7 @@
       display: grid;
       grid-template-rows: auto 1fr;
       min-height: 100vh;
-      max-width: 860px;
+      max-width: 1400px;
       margin: 0 auto;
       padding: 0 24px 48px;
     }
@@ -183,6 +185,86 @@
 
     .content {
       padding-top: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* PDF Upload Section */
+    .upload-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .upload-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      flex-shrink: 0;
+    }
+
+    .file-input-wrapper {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .file-input-wrapper input[type="file"] {
+      position: absolute;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+
+    .file-input-display {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      border: 1px dashed var(--border-hi);
+      border-radius: 4px;
+      background: var(--bg);
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-dim);
+      transition: all 0.2s ease;
+    }
+
+    .file-input-wrapper:hover .file-input-display {
+      border-color: var(--blue-dim);
+      color: var(--blue);
+    }
+
+    .btn-upload {
+      background: transparent;
+      border-color: var(--blue-dim);
+      color: var(--blue);
+    }
+
+    .btn-upload:hover {
+      background: rgba(74, 158, 255, 0.1);
+      border-color: var(--blue);
+      box-shadow: 0 0 18px rgba(74, 158, 255, 0.2);
+    }
+
+    /* Two column layout for results */
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 1100px) {
+      .results-grid { grid-template-columns: 1fr; }
     }
 
     .panel {
@@ -237,10 +319,9 @@
     .panel-body::-webkit-scrollbar-track { background: transparent; }
     .panel-body::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
 
-    .qa-card {
+    .qa-card, .pdf-card {
       background: var(--bg);
       border: 1px solid var(--border);
-      border-left: 3px solid var(--green-dim);
       border-radius: 4px;
       padding: 14px 16px;
       display: flex;
@@ -249,16 +330,36 @@
       animation: slide-in 0.35s ease both;
     }
 
+    .qa-card { border-left: 3px solid var(--green-dim); }
+    .pdf-card { border-left: 3px solid var(--blue-dim); }
+
     @keyframes slide-in {
       from { opacity: 0; transform: translateY(8px); }
       to   { opacity: 1; transform: translateY(0); }
     }
 
-    .qa-card .ts {
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .ts {
       font-family: var(--mono);
       font-size: 10px;
       color: var(--text-dim);
       letter-spacing: 0.08em;
+    }
+
+    .pdf-filename {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--blue);
+      background: rgba(74, 158, 255, 0.1);
+      border: 1px solid var(--blue-dim);
+      border-radius: 3px;
+      padding: 2px 8px;
     }
 
     .qa-q {
@@ -308,6 +409,13 @@
       margin-top: 2px;
     }
 
+    .pdf-summary {
+      font-size: 13px;
+      color: var(--text);
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
     .empty {
       display: flex;
       flex-direction: column;
@@ -352,7 +460,7 @@
     <div class="header-left">
       <span class="logo">Surgical M&amp;M</span>
       <h1>Conference Assistant</h1>
-      <span class="subtitle">Real-time question detection &amp; AI answers</span>
+      <span class="subtitle">Real-time question detection &amp; document analysis</span>
     </div>
 
     <div class="status-bar">
@@ -373,25 +481,79 @@
   </header>
 
   <div class="content">
-    <div class="panel">
-      <div class="panel-header">
-        <span class="panel-title">Detected Questions &amp; Answers</span>
-        <span class="panel-count" id="qaCount">0</span>
-      </div>
 
-      <div class="panel-body" id="qaList">
-        <div class="empty" id="qaEmpty">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
+    <!-- PDF Upload Section -->
+    <div class="upload-section">
+      <span class="upload-label">Upload PDF</span>
+      <div class="file-input-wrapper">
+        <input type="file" id="pdfInput" accept=".pdf" onchange="handleFileSelect()" />
+        <div class="file-input-display">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
-          <p>Awaiting questions from the conference</p>
+          <span id="fileLabel">Choose PDF file...</span>
+        </div>
+      </div>
+      <button class="btn btn-upload" id="uploadBtn" onclick="uploadPDF()" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <span>Analyze</span>
+      </button>
+    </div>
+
+    <!-- Two Column Results Grid -->
+    <div class="results-grid">
+
+      <!-- PDF Summaries Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Case Summaries</span>
+          <span class="panel-count" id="pdfCount">0</span>
+        </div>
+
+        <div class="panel-body" id="pdfList">
+          <div class="empty" id="pdfEmpty">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+            <p>No PDF documents uploaded</p>
+          </div>
         </div>
       </div>
 
-      <div class="log-line" id="logLine">—</div>
+      <!-- Questions & Answers Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Questions &amp; Answers</span>
+          <span class="panel-count" id="qaCount">0</span>
+        </div>
+
+        <div class="panel-body" id="qaList">
+          <div class="empty" id="qaEmpty">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <p>Awaiting questions from conference</p>
+          </div>
+        </div>
+
+        <div class="log-line" id="logLine">—</div>
+      </div>
+
     </div>
+
   </div>
 
 </div>
@@ -400,6 +562,8 @@
   let isRecording = false;
   let evtSource = null;
   let qaCount = 0;
+  let pdfCount = 0;
+  let selectedFile = null;
 
   function connectSSE() {
     if (evtSource) evtSource.close();
@@ -418,6 +582,9 @@
     if (type === 'qa') {
       addQA(data);
       setLog(`✦ Question captured at ${data.timestamp}`);
+    } else if (type === 'pdf_summary') {
+      addPDFSummary(data);
+      setLog(`📄 PDF analyzed: ${data.filename}`);
     } else if (type === 'status') {
       setLog(data.text);
     } else if (type === 'no_question') {
@@ -442,6 +609,25 @@
     list.prepend(card);
     qaCount++;
     document.getElementById('qaCount').textContent = qaCount;
+  }
+
+  function addPDFSummary(data) {
+    const empty = document.getElementById('pdfEmpty');
+    if (empty) empty.remove();
+
+    const list = document.getElementById('pdfList');
+    const card = document.createElement('div');
+    card.className = 'pdf-card';
+    card.innerHTML = `
+      <div class="card-header">
+        <span class="ts">${data.timestamp}</span>
+        <span class="pdf-filename">${escHtml(data.filename)}</span>
+      </div>
+      <div class="pdf-summary">${escHtml(data.summary)}</div>
+    `;
+    list.prepend(card);
+    pdfCount++;
+    document.getElementById('pdfCount').textContent = pdfCount;
   }
 
   function setLog(msg) {
@@ -493,6 +679,60 @@
       status.textContent = 'Idle';
       btn.className = 'btn btn-start';
       label.textContent = 'Start Listening';
+    }
+  }
+
+  function handleFileSelect() {
+    const input = document.getElementById('pdfInput');
+    const label = document.getElementById('fileLabel');
+    const btn = document.getElementById('uploadBtn');
+    
+    if (input.files.length > 0) {
+      selectedFile = input.files[0];
+      label.textContent = selectedFile.name;
+      btn.disabled = false;
+    } else {
+      selectedFile = null;
+      label.textContent = 'Choose PDF file...';
+      btn.disabled = true;
+    }
+  }
+
+  async function uploadPDF() {
+    if (!selectedFile) return;
+    
+    const btn = document.getElementById('uploadBtn');
+    const originalText = btn.querySelector('span').textContent;
+    btn.disabled = true;
+    btn.querySelector('span').textContent = 'Processing...';
+    
+    setLog(`Uploading ${selectedFile.name}...`);
+    
+    const formData = new FormData();
+    formData.append('pdf', selectedFile);
+    
+    try {
+      const res = await fetch('/upload_pdf', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const json = await res.json();
+      
+      if (res.ok) {
+        setLog(`✓ PDF processed successfully`);
+        // Reset file input
+        document.getElementById('pdfInput').value = '';
+        document.getElementById('fileLabel').textContent = 'Choose PDF file...';
+        selectedFile = null;
+      } else {
+        setLog(`Error: ${json.error}`);
+      }
+    } catch (err) {
+      setLog(`Upload failed: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.querySelector('span').textContent = originalText;
     }
   }
 

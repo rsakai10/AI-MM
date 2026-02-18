@@ -6,17 +6,22 @@ import datetime
 import tempfile
 import warnings
 import numpy as np
+from werkzeug.utils import secure_filename
 
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU")
 
-from flask import Flask, render_template, Response, jsonify
+from flask import Flask, render_template, Response, jsonify, request
 from openai import OpenAI
 import sounddevice as sd
 import soundfile as sf
 import whisper
+import pdfplumber
 
 app = Flask(__name__)
-client = OpenAI()
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
+app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY_PERSONAL"))
 
 # ----------------------------
 # Configuration
@@ -31,6 +36,7 @@ is_recording = False
 recording_lock = threading.Lock()
 
 questions_and_answers = []  # Q&A history, replayed on SSE reconnect
+pdf_summaries = []  # PDF summaries, replayed on SSE reconnect
 
 # Per-client SSE queues
 _sse_clients = []
@@ -55,6 +61,52 @@ initial_prompt = (
 print("Loading Whisper model...")
 model = whisper.load_model("small")
 print("Whisper model loaded.")
+
+# ----------------------------
+# PDF Processing
+# ----------------------------
+def extract_text_from_pdf(pdf_path):
+    """Extract text from PDF using pdfplumber."""
+    text = ""
+    with pdfplumber.open(pdf_path) as pdf:
+        for i, page in enumerate(pdf.pages):
+            page_text = page.extract_text()
+            if page_text:
+                text += f"--- Page {i+1} ---\n{page_text}\n\n"
+    return text
+
+
+def summarize_text(text, filename):
+    """Generate a summary using GPT."""
+    # Truncate if text is very long (GPT has token limits)
+    max_chars = 30000
+    if len(text) > max_chars:
+        text = text[:max_chars] + "\n\n[Document truncated due to length...]"
+    
+    prompt = f"""
+    You are analyzing a document from a Surgical M&M conference.
+    
+    Document: {filename}
+    
+    Content:
+    {text}
+    
+    Provide a concise summary (3-5 paragraphs) covering:
+    1. Main topics or cases discussed
+    2. Key findings or complications
+    3. Important recommendations or takeaways
+    
+    Keep the summary medical and professional.
+    """
+    
+    completion = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.3,
+    )
+    
+    return completion.choices[0].message.content.strip()
+
 
 # ----------------------------
 # OpenAI Q&A detection
@@ -262,6 +314,78 @@ def stop_recording():
     return jsonify({"status": "stopped"})
 
 
+@app.route("/upload_pdf", methods=["POST"])
+def upload_pdf():
+    """Handle PDF upload, extract text, and generate summary."""
+    print(f"[PDF] Upload request received")
+    print(f"[PDF] request.files keys: {list(request.files.keys())}")
+    print(f"[PDF] request.form keys: {list(request.form.keys())}")
+    
+    if "pdf" not in request.files:
+        print("[PDF ERROR] No 'pdf' key in request.files")
+        return jsonify({"error": "No file provided"}), 400
+    
+    file = request.files["pdf"]
+    print(f"[PDF] File object: {file}")
+    print(f"[PDF] Filename: {file.filename}")
+    
+    if file.filename == "":
+        print("[PDF ERROR] Empty filename")
+        return jsonify({"error": "No file selected"}), 400
+    
+    if not file.filename.lower().endswith(".pdf"):
+        print(f"[PDF ERROR] Not a PDF: {file.filename}")
+        return jsonify({"error": "File must be a PDF"}), 400
+    
+    try:
+        # Save uploaded file temporarily
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+        
+        print(f"[PDF] Processing {filename}...")
+        
+        # Extract text
+        text = extract_text_from_pdf(filepath)
+        
+        if not text.strip():
+            os.unlink(filepath)
+            print("[PDF ERROR] No text extracted")
+            return jsonify({"error": "Could not extract text from PDF"}), 400
+        
+        print(f"[PDF] Extracted {len(text)} characters, generating summary...")
+        
+        # Generate summary
+        summary = summarize_text(text, filename)
+        
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        
+        pdf_entry = {
+            "timestamp": timestamp,
+            "filename": filename,
+            "summary": summary,
+            "char_count": len(text)
+        }
+        
+        pdf_summaries.append(pdf_entry)
+        broadcast("pdf_summary", pdf_entry)
+        
+        print(f"[PDF] Summary generated and broadcast.")
+        
+        # Clean up temp file
+        os.unlink(filepath)
+        
+        return jsonify({"status": "success", "summary": pdf_entry})
+    
+    except Exception as e:
+        print(f"[PDF ERROR] {e}")
+        import traceback
+        traceback.print_exc()
+        if 'filepath' in locals() and os.path.exists(filepath):
+            os.unlink(filepath)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/stream")
 def sse_stream():
     """Server-Sent Events — each client gets its own queue."""
@@ -273,9 +397,11 @@ def sse_stream():
 
     def generate():
         try:
-            # Replay Q&A history for this client
+            # Replay history for this client
             for qa in questions_and_answers:
                 yield "data: {}\n\n".format(json.dumps({"type": "qa", "data": qa}))
+            for pdf in pdf_summaries:
+                yield "data: {}\n\n".format(json.dumps({"type": "pdf_summary", "data": pdf}))
 
             while True:
                 try:
@@ -299,6 +425,7 @@ def status():
     return jsonify({
         "is_recording": is_recording,
         "qa_count": len(questions_and_answers),
+        "pdf_count": len(pdf_summaries),
     })
 
 
