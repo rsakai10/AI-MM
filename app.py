@@ -21,7 +21,7 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY_PERSONAL"))
+client = OpenAI()
 
 # ----------------------------
 # Configuration
@@ -77,26 +77,34 @@ def extract_text_from_pdf(pdf_path):
 
 
 def summarize_text(text, filename):
-    """Generate a summary using GPT."""
+    """Generate a summary using GPT in structured M&M format."""
     # Truncate if text is very long (GPT has token limits)
     max_chars = 30000
     if len(text) > max_chars:
         text = text[:max_chars] + "\n\n[Document truncated due to length...]"
     
     prompt = f"""
-    You are analyzing a document from a Surgical M&M conference.
+    You are analyzing a document from a Surgical Morbidity & Mortality (M&M) conference.
     
     Document: {filename}
     
     Content:
     {text}
     
-    Provide a concise summary (3-5 paragraphs) covering:
-    1. Main topics or cases discussed
-    2. Key findings or complications
-    3. Important recommendations or takeaways
+    Provide a comprehensive M&M case analysis structured in the following format. If the document doesn't contain information for a specific section, write "Not specified in document" for that section:
     
-    Keep the summary medical and professional.
+    ## Case Information
+    
+    ## Case Review
+    
+    ## Potential Contributing Factors
+    
+    ## Cause Analysis
+    
+    ## Literature Review (medical literature, guidelines, or best practices)
+    
+    ## Summary & Action Items
+
     """
     
     completion = client.chat.completions.create(
