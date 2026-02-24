@@ -1,0 +1,6 @@
+{
+  "embedding_model": "text-embedding-3-small",
+  "dimension": 1536,
+  "metric": "cosine_via_inner_product_after_l2_normalization",
+  "num_chunks": 1310
+}
