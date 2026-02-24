@@ -441,21 +441,63 @@
       font-size: 13px;
       color: var(--text);
       line-height: 1.7;
-      white-space: pre-wrap;
+      white-space: normal;
+      word-wrap: break-word;
     }
 
     /* Style markdown headers in summaries */
+    .pdf-summary h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-hi);
+      margin-top: 20px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--blue);
+      padding-bottom: 8px;
+    }
+
     .pdf-summary h2 {
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: 13px;
       font-weight: 600;
       letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--blue);
       margin-top: 16px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
       padding-bottom: 4px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--border-hi);
+    }
+
+    .pdf-summary h3 {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--amber);
+      margin-top: 12px;
+      margin-bottom: 8px;
+    }
+
+    .pdf-summary p {
+      margin-bottom: 12px;
+    }
+
+    .pdf-summary strong {
+      color: var(--text-hi);
+      font-weight: 600;
+    }
+
+    .pdf-summary em {
+      color: var(--green);
+      font-style: italic;
+    }
+
+    .pdf-summary code {
+      background: var(--bg);
+      color: var(--green);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: var(--mono);
+      font-size: 12px;
     }
 
     .pdf-summary h2:first-child {
@@ -735,11 +777,38 @@
   }
 
   function formatMarkdown(text) {
-    // Convert ## Headers to <h2> tags
+    // First, escape HTML to prevent injection
     let formatted = escHtml(text);
+    
+    // Convert headers: ###, ##, #
+    formatted = formatted.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     formatted = formatted.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    formatted = formatted.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    
+    // Convert **bold** to <strong>
+    formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    
+    // Convert *italic* to <em>
+    formatted = formatted.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    
+    // Convert __bold__ to <strong>
+    formatted = formatted.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    
+    // Convert _italic_ to <em>
+    formatted = formatted.replace(/_(.+?)_/g, '<em>$1</em>');
+    
+    // Convert `code` to <code>
+    formatted = formatted.replace(/`(.+?)`/g, '<code>$1</code>');
+    
     // Convert line breaks to <br> for proper spacing
+    formatted = formatted.replace(/\n\n/g, '</p><p>');
     formatted = formatted.replace(/\n/g, '<br>');
+    
+    // Wrap in paragraphs
+    if (!formatted.includes('<h') && !formatted.includes('<p>')) {
+      formatted = '<p>' + formatted + '</p>';
+    }
+    
     return formatted;
   }
 
