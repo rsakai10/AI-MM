@@ -84,29 +84,91 @@ def summarize_text(text, filename):
         text = text[:max_chars] + "\n\n[Document truncated due to length...]"
     
     prompt = f"""
-    You are analyzing a document from a Surgical Morbidity & Mortality (M&M) conference.
-    
-    Document: {filename}
-    
-    Content:
-    {text}
-    
-    Provide a comprehensive M&M case analysis structured in the following format. If the document doesn't contain information for a specific section, write "Not specified in document" for that section:
-    
-    ## Case Information
-    
-    ## Case Review
-    
-    ## Potential Contributing Factors
-    
-    ## Cause Analysis
-    
-    ## Literature Review (medical literature, guidelines, or best practices)
-    
-    ## Summary & Action Items
+You are an expert clinical safety analyst assisting with a Surgical Morbidity & Mortality (M&M) conference.
 
-    """
-    
+You are analyzing a conference document and must extract and organize the case according to a standardized M&M presentation framework used in academic surgical departments.
+
+IMPORTANT PRINCIPLES:
+- Focus on systems and process failures, NOT individual blame.
+- Emphasize safety events, contributing factors, and prevention.
+- Be concise, factual, and structured.
+- Only use information contained in the document.
+- If information for a section is missing, write: "Not specified in document".
+
+Document name: {filename}
+
+DOCUMENT CONTENT:
+{text}
+
+
+Provide a structured M&M case analysis with the following sections:
+
+
+## 1. Case Information
+Briefly summarize:
+- the clinical scenario in ONE sentence if possible
+- why the case was selected (safety event, complication, near miss, educational case)
+- classify the type of event if described
+
+
+
+
+## 2. Case Review
+Provide a concise clinical summary including:
+- patient background (if available)
+- timeline of events
+- key interventions or decisions
+- outcome
+
+
+## 3. Potential Contributing Factors
+List any factors that may have contributed to the event, including:
+
+- system or workflow issues
+- communication problems
+- cognitive biases
+- decision-making issues
+- documentation problems
+- equipment or environment factors
+- staffing or process failures
+
+
+
+## 4. Cause Analysis
+Identify the apparent cause(s) of deviation from standard care.
+
+If possible, distinguish:
+
+- immediate cause(s)
+- underlying/root system issues
+
+
+
+## 5. Literature Review / Standard of Care
+Summarize any references in the document to:
+
+- clinical guidelines
+- evidence-based standards
+- known complication risks
+- recommended best practices
+
+If none appear, state that.
+
+
+
+## 6. Summary & Action Items
+Provide:
+
+- short overall summary of the safety issue
+- lessons learned
+- recommended prevention strategies
+- possible system improvements if mentioned
+
+
+Return ONLY the structured analysis.
+Do not add commentary outside the sections.
+"""
+
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
