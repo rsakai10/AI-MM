@@ -57,6 +57,7 @@ sudo apt install ffmpeg libportaudio2
 your_project/
 ├── app.py
 ├── requirements.txt
+├── .env
 └── templates/
     └── index.html
 ```
@@ -67,13 +68,23 @@ your_project/
 pip install -r requirements.txt
 ```
 
-**3. Set your OpenAI API key**
+**3. Configure your OpenAI API key**
+
+Create a `.env` file in the project root directory with your OpenAI API key:
 
 ```bash
-export OPENAI_API_KEY="sk-..."
+# Create .env file
+echo 'OPENAI_API_KEY=sk-your-actual-api-key-here' > .env
 ```
 
-To avoid doing this every time, add the line above to your `~/.zshrc` or `~/.bashrc` file.
+Or manually create `.env` and add:
+```
+OPENAI_API_KEY=sk-your-actual-api-key-here
+```
+
+Replace `sk-your-actual-api-key-here` with your actual OpenAI API key from https://platform.openai.com/api-keys
+
+> **⚠️ Important:** Never commit `.env` to git. The `.env` file is already in `.gitignore` to protect your secrets.
 
 **4. Run the app**
 
