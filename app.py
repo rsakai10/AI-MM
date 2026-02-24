@@ -8,6 +8,9 @@ import warnings
 import numpy as np
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
+from pathlib import Path
+from typing import List, Dict, Any, Optional
+import faiss
 
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU")
 
@@ -25,6 +28,14 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
 
 client = OpenAI()
+
+KB_DIR = os.environ.get("KB_DIR", "./kb_store")
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "text-embedding-3-small")
+RAG_TOP_K = int(os.environ.get("RAG_TOP_K", "5"))
+
+kb_index = None
+kb_meta: List[Dict[str, Any]] = []
+kb_ready = False
 
 # ----------------------------
 # Configuration
@@ -64,6 +75,7 @@ initial_prompt = (
 print("Loading Whisper model...")
 model = whisper.load_model("small")
 print("Whisper model loaded.")
+
 
 # ----------------------------
 # PDF Processing
@@ -118,52 +130,218 @@ def summarize_text(text, filename):
     
     return completion.choices[0].message.content.strip()
 
+# RAG functions
+def load_kb():
+    global kb_index, kb_meta, kb_ready
+
+    kb_ready = False
+    kb_meta = []
+    kb_index = None
+
+    kb_dir = Path(KB_DIR)
+    index_path = kb_dir / "kb.index"
+    meta_path = kb_dir / "kb_meta.jsonl"
+
+    if not index_path.exists() or not meta_path.exists():
+        print(f"[RAG] KB not found at {KB_DIR}. RAG will be disabled.")
+        return
+
+    kb_index = faiss.read_index(str(index_path))
+
+    with open(meta_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            kb_meta.append(json.loads(line))
+
+    kb_ready = True
+    print(f"[RAG] KB loaded. Chunks={len(kb_meta)}")
+
+
+def embed_query(text: str) -> np.ndarray:
+    resp = client.embeddings.create(
+        model=EMBEDDING_MODEL,
+        input=[text],
+    )
+    vec = np.array([resp.data[0].embedding], dtype="float32")
+    faiss.normalize_L2(vec)
+    return vec
+
+
+def retrieve_context(query: str, top_k: int = RAG_TOP_K) -> List[Dict[str, Any]]:
+    if not kb_ready or kb_index is None or not kb_meta:
+        return []
+
+    qvec = embed_query(query)
+    scores, indices = kb_index.search(qvec, top_k)
+
+    hits: List[Dict[str, Any]] = []
+    for score, idx in zip(scores[0].tolist(), indices[0].tolist()):
+        if idx < 0 or idx >= len(kb_meta):
+            continue
+        item = kb_meta[idx]
+        hits.append(
+            {
+                "score": float(score),
+                "source": item.get("source", ""),
+                "chunk_index": item.get("chunk_index", -1),
+                "text": item.get("text", ""),
+            }
+        )
+    return hits
+
+
+def format_rag_context(hits: List[Dict[str, Any]]) -> str:
+    if not hits:
+        return "No retrieved knowledge base context."
+
+    parts: List[str] = []
+    for i, h in enumerate(hits, start=1):
+        source = h.get("source", "unknown")
+        chunk_index = h.get("chunk_index", -1)
+        score = h.get("score", 0.0)
+        text = h.get("text", "")
+        parts.append(
+            f"[Retrieved Chunk {i}] "
+            f"source={source}, chunk_index={chunk_index}, score={score:.4f}\n"
+            f"{text}"
+        )
+    return "\n\n".join(parts)
+
+
+load_kb()
 
 # ----------------------------
 # OpenAI Q&A detection
 # ----------------------------
+
 def detect_and_answer_question(text: str):
-    prompt = f"""
-    You are an assistant for a Surgical Morbidity and Mortality Conference.
+    # Step 1: detect whether there is a question and extract a refined question
+    detection_prompt = f"""
+You are an assistant for a Surgical Morbidity and Mortality Conference.
 
-    Analyze the following transcript segment:
-    "{text}"
+Analyze the following transcript segment:
+\"\"\"{text}\"\"\"
 
-    Task:
-    1. Determine if this segment contains a question from the audience.
-    2. If YES, extract and refine the question for grammar and clarity.
-    3. Provide a medical answer if you can based on your knowledge.
-    4. If you cannot answer due to insufficient context, state that clearly.
+Task:
+1. Determine if this segment contains a question from the audience.
+2. If YES, extract and refine the question for grammar and clarity.
+3. Do not answer the question yet.
 
-    Respond in this JSON format:
-    {{
-        "has_question": true/false,
-        "question": "the refined question or null",
-        "answer": "your answer or explanation of why you cannot answer"
-    }}
+Respond in JSON only with this format:
+{{
+  "has_question": true/false,
+  "question": "refined question string or null"
+}}
+"""
 
-    Only include "question" and "answer" if has_question is true.
-    """
-
-    completion = client.chat.completions.create(
+    detection_completion = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
+        messages=[{"role": "user", "content": detection_prompt}],
         temperature=0.0,
     )
 
-    result = completion.choices[0].message.content.strip()
+    detection_result = detection_completion.choices[0].message.content.strip()
 
     try:
-        if result.startswith("```json"):
-            result = result.split("```json")[1].split("```")[0].strip()
-        elif result.startswith("```"):
-            result = result.split("```")[1].split("```")[0].strip()
-        return json.loads(result)
+        if detection_result.startswith("```json"):
+            detection_result = detection_result.split("```json", 1)[1].split("```", 1)[0].strip()
+        elif detection_result.startswith("```"):
+            detection_result = detection_result.split("```", 1)[1].split("```", 1)[0].strip()
+        detection = json.loads(detection_result)
     except json.JSONDecodeError:
-        print(f"[WARN] Could not parse JSON: {result}")
+        print(f"[WARN] Could not parse detection JSON: {detection_result}")
         return {"has_question": False}
 
+    if not detection.get("has_question"):
+        return {"has_question": False}
 
+    question = (detection.get("question") or "").strip()
+    if not question:
+        return {"has_question": False}
+
+    # Step 2: retrieve KB context using RAG
+    hits = retrieve_context(question, top_k=RAG_TOP_K)
+    rag_context = format_rag_context(hits)
+
+    # Step 3: answer with RAG context
+    answer_prompt = f"""
+    You are an assistant for a Surgical Morbidity and Mortality Conference.
+    
+    You must answer the question using the retrieved knowledge base context when it is relevant.
+    If the retrieved context is insufficient or not directly applicable, say what is missing and then provide a cautious answer based on general medical knowledge.
+    Do not fabricate citations or facts.
+    Be concise but clinically useful.
+    
+    Question:
+    {question}
+    
+    Retrieved knowledge base context:
+    {rag_context}
+    
+    Return JSON only in this format:
+    {{
+      "has_question": true,
+      "question": "refined question string",
+      "answer": "final answer",
+      "rag_used": true/false,
+      "retrieved_chunks": [
+        {{
+          "source": "path",
+          "chunk_index": 0,
+          "score": 0.0
+        }}
+      ]
+    }}
+    """
+
+
+    answer_completion = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": answer_prompt}],
+        temperature=0.1,
+    )
+
+    answer_result = answer_completion.choices[0].message.content.strip()
+
+    try:
+        if answer_result.startswith("```json"):
+            answer_result = answer_result.split("```json", 1)[1].split("```", 1)[0].strip()
+        elif answer_result.startswith("```"):
+            answer_result = answer_result.split("```", 1)[1].split("```", 1)[0].strip()
+        parsed = json.loads(answer_result)
+
+        # Fallback if model omitted retrieval metadata
+        if "retrieved_chunks" not in parsed:
+            parsed["retrieved_chunks"] = [
+                {
+                    "source": h["source"],
+                    "chunk_index": h["chunk_index"],
+                    "score": h["score"],
+                }
+                for h in hits
+            ]
+        if "rag_used" not in parsed:
+            parsed["rag_used"] = len(hits) > 0
+
+        return parsed
+    except json.JSONDecodeError:
+        print(f"[WARN] Could not parse answer JSON: {answer_result}")
+        return {
+            "has_question": True,
+            "question": question,
+            "answer": "I detected a question, but the answer formatter failed. Please retry.",
+            "rag_used": len(hits) > 0,
+            "retrieved_chunks": [
+                {
+                    "source": h["source"],
+                    "chunk_index": h["chunk_index"],
+                    "score": h["score"],
+                }
+                for h in hits
+            ],
+        }
 # ----------------------------
 # Audio callback
 # ----------------------------
@@ -246,6 +424,8 @@ def process_audio():
                     "timestamp": timestamp,
                     "question": question,
                     "answer": answer,
+                    "rag_used": analysis.get("rag_used", False),
+                    "retrieved_chunks": analysis.get("retrieved_chunks", []),
                 }
                 questions_and_answers.append(qa_entry)
                 broadcast("qa", qa_entry)
