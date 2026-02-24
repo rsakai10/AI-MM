@@ -29,6 +29,25 @@
       --sans:       'IBM Plex Sans', sans-serif;
     }
 
+    /* Light theme */
+    [data-theme="light"] {
+      --bg:         #f5f7fa;
+      --surface:    #ffffff;
+      --border:     #d0d8e0;
+      --border-hi:  #b8c4d4;
+      --green:      #00a875;
+      --green-dim:  #008856;
+      --green-glow: rgba(0, 168, 117, 0.1);
+      --amber:      #d97706;
+      --amber-dim:  #b45309;
+      --red:        #ef4444;
+      --blue:       #2563eb;
+      --blue-dim:   #1d4ed8;
+      --text:       #1f2937;
+      --text-dim:   #6b7280;
+      --text-hi:    #000000;
+    }
+
     html, body {
       height: 100%;
       background: var(--bg);
@@ -37,19 +56,14 @@
       font-size: 14px;
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
+      transition: background-color 0.3s ease, color 0.3s ease;
     }
 
     body::before {
       content: '';
       position: fixed;
       inset: 0;
-      background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 2px,
-        rgba(0,0,0,0.06) 2px,
-        rgba(0,0,0,0.06) 4px
-      );
+      background: transparent;
       pointer-events: none;
       z-index: 9999;
     }
@@ -178,6 +192,19 @@
     .btn-stop:hover {
       background: rgba(255,82,82,0.1);
       box-shadow: 0 0 18px rgba(255,82,82,0.2);
+    }
+
+    .btn-theme {
+      background: transparent;
+      border-color: var(--text-dim);
+      color: var(--text-dim);
+      padding: 10px 16px;
+    }
+
+    .btn-theme:hover {
+      border-color: var(--amber);
+      color: var(--amber);
+      box-shadow: 0 0 18px rgba(245, 166, 35, 0.15);
     }
 
     .btn:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
@@ -487,6 +514,19 @@
         <span class="dot"></span>
         <span id="statusText">Idle</span>
       </div>
+      <button class="btn btn-theme" id="themeToggle" onclick="toggleTheme()" title="Toggle dark/light mode">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+      </button>
       <button class="btn btn-start" id="toggleBtn" onclick="toggleRecording()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -578,6 +618,23 @@
 </div>
 
 <script>
+  // Theme Management
+  function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+  }
+
+  function toggleTheme() {
+    const html = document.documentElement;
+    const currentTheme = html.getAttribute('data-theme') || 'dark';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+  }
+
+  // Initialize theme on page load
+  initTheme();
+
   let isRecording = false;
   let evtSource = null;
   let qaCount = 0;
