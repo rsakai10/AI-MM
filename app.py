@@ -7,11 +7,14 @@ import tempfile
 import warnings
 import numpy as np
 from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import faiss
 
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU")
+
+load_dotenv()
 
 from flask import Flask, render_template, Response, jsonify, request
 from openai import OpenAI
