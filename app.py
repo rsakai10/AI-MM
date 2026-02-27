@@ -10,7 +10,6 @@ from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-import faiss
 
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU")
 
@@ -20,8 +19,17 @@ from flask import Flask, render_template, Response, jsonify, request
 from openai import OpenAI
 import sounddevice as sd
 import soundfile as sf
-import whisper
 import pdfplumber
+
+# IMPORTANT: Load whisper model BEFORE importing faiss to avoid segfault
+# (Both libraries use conflicting OpenMP/BLAS versions)
+import whisper
+print("Loading Whisper model...")
+model = whisper.load_model("small")
+print("Whisper model loaded.")
+
+# Import faiss AFTER whisper model is loaded
+import faiss
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
@@ -71,10 +79,6 @@ initial_prompt = (
     "Common terms: EKG, troponin, lab, diabetes, GI, ICU, vasopressors, norepinephrine, "
     "intubation, extubation, wound infection, dehiscence, drain output."
 )
-
-print("Loading Whisper model...")
-model = whisper.load_model("small")
-print("Whisper model loaded.")
 
 
 # ----------------------------
